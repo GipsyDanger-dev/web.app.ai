@@ -51,7 +51,6 @@
     </div>
 
     <script>
-        // === KONFIGURASI ===
         const CLASSES = [
             'Fresh Apple', 'Fresh Banana', 'Fresh Orange',
             'Rotten Apple', 'Rotten Banana', 'Rotten Orange'
@@ -66,7 +65,6 @@
 
         async function main() {
             try {
-                // 1. Setup Kamera
                 statusText.innerText = "Membuka Kamera...";
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { width: 640, height: 480, facingMode: 'environment' },
@@ -75,13 +73,10 @@
                 video.srcObject = stream;
                 await new Promise(r => video.onloadedmetadata = r);
 
-                // 2. LOAD MODEL (GRAPH MODEL)
                 statusText.innerText = "Memuat Graph Model...";
-                
-                // PERHATIKAN: tf.loadGraphModel (Bukan loadLayersModel)
+
                 model = await tf.loadGraphModel('/model_web/model.json');
-                
-                // Warmup
+
                 statusText.innerText = "Menyiapkan GPU...";
                 const zeros = tf.zeros([1, 224, 224, 3]);
                 model.predict(zeros).dispose();
@@ -92,7 +87,6 @@
                 statusText.classList.add('text-green-500');
                 document.getElementById('result-box').classList.remove('hidden');
 
-                // 3. Mulai Loop
                 detectFrame();
 
             } catch (err) {
@@ -103,21 +97,20 @@
         }
 
         async function detectFrame() {
-            // Bersihkan canvas
             ctx.clearRect(0, 0, 640, 480);
             ctx.drawImage(video, 0, 0, 640, 480);
 
             if (model) {
                 tf.tidy(() => {
-                    // Preprocessing
+
                     const img = tf.browser.fromPixels(video)
                         .resizeBilinear([224, 224])
                         .div(tf.scalar(255))
-                        .expandDims(0); // Tambah dimensi batch [1, 224, 224, 3]
+                        .expandDims(0); 
 
                     // Prediksi
                     const result = model.predict(img);
-                    const scores = result.dataSync(); // Ambil data
+                    const scores = result.dataSync(); 
                     
                     // Cari nilai tertinggi
                     const maxScore = Math.max(...scores);
@@ -126,11 +119,9 @@
                     const label = CLASSES[maxIndex];
                     const confidence = (maxScore * 100).toFixed(1);
 
-                    // Update UI
                     document.getElementById('label-res').innerText = label;
                     document.getElementById('conf-res').innerText = confidence + "%";
-                    
-                    // Gambar Kotak
+
                     const color = label.toLowerCase().includes("fresh") ? "#4ade80" : "#ef4444";
                     document.getElementById('label-res').style.color = color;
                     
