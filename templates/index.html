@@ -3,52 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FASTFRUIT FINAL</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+    <title>FASTFRUIT AI Dashboard</title>
     
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+
     <style>
-        body { background-color: #0f172a; color: white; }
-        .monitor {
-            position: relative; width: 640px; height: 480px; margin: auto;
-            border: 2px solid #334155; border-radius: 12px; overflow: hidden;
-            background: #000;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Video kita sembunyikan secara visual, TAPI JANGAN display:none agar tetap bisa dibaca JS */
+        #webcam { 
+            position: absolute; 
+            opacity: 0; 
+            z-index: -1; 
+            width: 1px; 
+            height: 1px; 
         }
-        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        /* Mirror effect */
-        video, canvas { transform: scaleX(-1); }
+        
+        .progress-bar { transition: width 0.3s ease; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center font-sans">
+<body class="bg-[#0f172a] text-white min-h-screen flex flex-col">
 
-    <div class="mb-6 text-center">
-        <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
-            FASTFRUIT <span class="text-white text-xl">GRAPH MODE</span>
-        </h1>
-    </div>
-
-    <div class="monitor shadow-[0_0_50px_rgba(0,255,0,0.1)]">
-        <video id="webcam" autoplay playsinline muted></video>
-        <canvas id="output-canvas" width="640" height="480"></canvas>
-    </div>
-
-    <!-- Status Box -->
-    <div class="mt-6 text-center w-full max-w-2xl px-4">
-        <p id="status-text" class="text-blue-400 font-mono animate-pulse">Menghubungkan...</p>
-        
-        <!-- Hasil -->
-        <div id="result-box" class="hidden flex justify-center gap-4 mt-4">
-            <div class="bg-gray-800 px-6 py-3 rounded-lg border border-gray-600">
-                <p class="text-xs text-gray-500 uppercase">PREDICTION</p>
-                <h2 id="label-res" class="text-2xl font-bold text-white">-</h2>
-            </div>
-            <div class="bg-gray-800 px-6 py-3 rounded-lg border border-gray-600">
-                <p class="text-xs text-gray-500 uppercase">CONFIDENCE</p>
-                <h2 id="conf-res" class="text-2xl font-bold text-blue-400">-</h2>
+    <!-- HEADER -->
+    <nav class="p-4 md:px-8 border-b border-slate-800 flex justify-between items-center bg-[#0f172a]/90 sticky top-0 z-50">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-blue-400">FASTFRUIT</h1>
+            <p class="text-xs text-slate-400 font-medium">Live Detection Mode</p>
+        </div>
+        <div class="flex gap-3">
+            <div id="cam-status" class="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400 font-bold">
+                OFFLINE
             </div>
         </div>
-    </div>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-grow container mx-auto px-4 py-6 max-w-6xl">
+        
+        <!-- DISPLAY SECTION -->
+        <div class="relative w-full max-w-4xl mx-auto mb-8">
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-black aspect-video">
+                
+                <!-- Video Asli (Hidden via CSS opacity) -->
+                <video id="webcam" playsinline muted></video>
+                
+                <!-- Canvas Output (Visible) -->
+                <canvas id="output-canvas" class="w-full h-full object-cover"></canvas>
+                
+                <!-- Loading Overlay -->
+                <div id="loading-overlay" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10 hidden">
+                    <i class="fas fa-circle-notch animate-spin text-4xl text-blue-500 mb-3"></i>
+                    <p class="text-slate-300 animate-pulse">Menyiapkan Kamera & AI...</p>
+                </div>
+
+                <!-- Overlay Info -->
+                <div class="absolute top-4 left-4 px-3 py-1 bg-black/50 rounded text-xs text-white backdrop-blur-sm pointer-events-none">
+                    <span id="resolution-info">- x -</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATS GRID -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <!-- Prediction Card -->
+            <div class="bg-slate-800/50 border border-slate-700 p-6 rounded-2xl h-40 relative overflow-hidden">
+                <div class="absolute top-2 right-4 opacity-20"><i class="fas fa-cube text-6xl"></i></div>
+                <h3 class="text-lg font-semibold text-slate-200">Prediction</h3>
+                <h2 id="label-res" class="text-4xl font-bold text-slate-500 mt-2">Waiting...</h2>
+            </div>
+
+            <!-- Confidence Card -->
+            <div class="bg-slate-800/50 border border-slate-700 p-6 rounded-2xl h-40">
+                <h3 class="text-lg font-semibold text-slate-200">Confidence</h3>
+                <h2 id="conf-res" class="text-4xl font-bold text-white mt-2">0%</h2>
+                <div class="w-full bg-slate-700 h-2 rounded-full mt-4 overflow-hidden">
+                    <div id="conf-bar" class="h-full bg-blue-500 w-0 progress-bar"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTROL -->
+        <div class="flex justify-center gap-4 mb-8">
+            <button onclick="startSystem()" id="btn-start" class="px-8 py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-white shadow-lg transition transform hover:scale-105 flex items-center gap-2">
+                <i class="fas fa-camera"></i> NYALAKAN KAMERA
+            </button>
+        </div>
+
+    </main>
 
     <script>
         const CLASSES = [
@@ -59,80 +103,149 @@
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('output-canvas');
         const ctx = canvas.getContext('2d');
-        const statusText = document.getElementById('status-text');
-
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const btnStart = document.getElementById('btn-start');
+        
         let model;
+        let isRunning = false;
 
-        async function main() {
+        async function startSystem() {
+            if (isRunning) return;
+            
             try {
-                statusText.innerText = "Membuka Kamera...";
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480, facingMode: 'environment' },
-                    audio: false
+                // UI Updates
+                btnStart.classList.add('hidden');
+                loadingOverlay.classList.remove('hidden');
+                
+                // 1. AKSES KAMERA (MODE AMAN)
+                // Kita hapus facingMode: 'environment' agar laptop ga bingung
+                // Kita gunakan { video: true } agar browser pilih kamera default apa aja
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: false 
                 });
+                
                 video.srcObject = stream;
-                await new Promise(r => video.onloadedmetadata = r);
+                
+                // Wajib play() manual agar tidak freeze
+                await video.play(); 
 
-                statusText.innerText = "Memuat Graph Model...";
-
+                // 2. LOAD MODEL
                 model = await tf.loadGraphModel('/model_web/model.json');
+                
+                // Warmup GPU
+                model.predict(tf.zeros([1, 224, 224, 3])).dispose();
 
-                statusText.innerText = "Menyiapkan GPU...";
-                const zeros = tf.zeros([1, 224, 224, 3]);
-                model.predict(zeros).dispose();
-                zeros.dispose();
+                // Selesai Loading
+                loadingOverlay.classList.add('hidden');
+                document.getElementById('cam-status').innerText = "ONLINE";
+                document.getElementById('cam-status').className = "px-3 py-1 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-400 font-bold";
+                
+                // Tampilkan resolusi
+                document.getElementById('resolution-info').innerText = `${video.videoWidth} x ${video.videoHeight}`;
 
-                statusText.innerText = "Sistem Siap!";
-                statusText.classList.remove('animate-pulse');
-                statusText.classList.add('text-green-500');
-                document.getElementById('result-box').classList.remove('hidden');
-
+                isRunning = true;
                 detectFrame();
 
             } catch (err) {
-                statusText.innerText = "ERROR: " + err.message;
-                statusText.classList.add('text-red-500');
                 console.error(err);
+                alert("GAGAL MEMBUKA KAMERA: " + err.message + "\n\nCek ikon gembok di URL bar -> Reset Permissions.");
+                loadingOverlay.classList.add('hidden');
+                btnStart.classList.remove('hidden');
+                btnStart.innerText = "COBA LAGI";
             }
         }
 
         async function detectFrame() {
-            ctx.clearRect(0, 0, 640, 480);
-            ctx.drawImage(video, 0, 0, 640, 480);
+            if (!isRunning) return;
 
-            if (model) {
-                tf.tidy(() => {
+            // Pastikan ukuran canvas sesuai video
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                // --- GAMBAR VIDEO (MIRROR FIX) ---
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+                ctx.restore();
 
-                    const img = tf.browser.fromPixels(video)
-                        .resizeBilinear([224, 224])
-                        .div(tf.scalar(255))
-                        .expandDims(0); 
+                // --- AI PREDICTION ---
+                if (model) {
+                    tf.tidy(() => {
+                        const img = tf.browser.fromPixels(video)
+                            .resizeBilinear([224, 224])
+                            .div(tf.scalar(255))
+                            .expandDims(0);
 
-                    // Prediksi
-                    const result = model.predict(img);
-                    const scores = result.dataSync(); 
+                        const result = model.predict(img);
+                        const scores = result.dataSync();
+                        const maxScore = Math.max(...scores);
+                        const maxIndex = scores.indexOf(maxScore);
 
-                    const maxScore = Math.max(...scores);
-                    const maxIndex = scores.indexOf(maxScore);
-                    
-                    const label = CLASSES[maxIndex];
-                    const confidence = (maxScore * 100).toFixed(1);
+                        const label = CLASSES[maxIndex];
+                        const confidence = maxScore * 100;
 
-                    document.getElementById('label-res').innerText = label;
-                    document.getElementById('conf-res').innerText = confidence + "%";
-
-                    const color = label.toLowerCase().includes("fresh") ? "#4ade80" : "#ef4444";
-                    document.getElementById('label-res').style.color = color;
-                    
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 4;
-                    ctx.strokeRect(100, 50, 440, 380);
-                });
+                        if (maxScore > 0.5) {
+                            updateUI(label, confidence);
+                            drawBox(label, confidence, true);
+                        } else {
+                            updateUI("Scanning...", 0);
+                            drawBox("", 0, false);
+                        }
+                    });
+                }
             }
+
             requestAnimationFrame(detectFrame);
         }
 
-        main();
+        function updateUI(label, confidence) {
+            const labelEl = document.getElementById('label-res');
+            const confEl = document.getElementById('conf-res');
+            const confBar = document.getElementById('conf-bar');
+
+            labelEl.innerText = label;
+            confEl.innerText = confidence.toFixed(1) + "%";
+            confBar.style.width = confidence + "%";
+
+            if (label.toLowerCase().includes('fresh')) {
+                labelEl.className = "text-4xl font-bold text-emerald-400 mt-2";
+                confBar.className = "h-full bg-emerald-500 w-0 progress-bar";
+            } else if (label.toLowerCase().includes('rotten')) {
+                labelEl.className = "text-4xl font-bold text-red-500 mt-2";
+                confBar.className = "h-full bg-red-500 w-0 progress-bar";
+            } else {
+                labelEl.className = "text-4xl font-bold text-slate-500 mt-2";
+            }
+        }
+
+        function drawBox(label, confidence, isDetected) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const size = Math.min(w, h) * 0.5;
+            const x = (w - size) / 2;
+            const y = (h - size) / 2;
+
+            ctx.lineWidth = 4;
+
+            if (isDetected) {
+                const color = label.toLowerCase().includes('fresh') ? "#34d399" : "#ef4444";
+                ctx.strokeStyle = color;
+                ctx.strokeRect(x, y, size, size);
+                
+                // Label Text
+                ctx.fillStyle = color;
+                ctx.font = "bold 20px Inter";
+                ctx.textAlign = "center";
+                ctx.fillText(label, w/2, y - 15);
+            } else {
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+                ctx.setLineDash([10, 10]);
+                ctx.strokeRect(x, y, size, size);
+                ctx.setLineDash([]);
+            }
+        }
     </script>
 </body>
 </html>
