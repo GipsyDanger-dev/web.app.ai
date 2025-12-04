@@ -3,136 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fruit AI - 60FPS Mode</title>
+    <title>FASTFRUIT AI Debug Mode</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    
+    <!-- GANTI KE VERSI STABIL (4.20.0) AGAR COCOK DENGAN CONVERTER -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+    
     <style>
-        body { background-color: #111827; color: white; }
-        .monitor-screen {
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
-            border: 1px solid #374151;
+        body { background-color: #0f172a; color: white; }
+        .monitor {
             position: relative; width: 640px; height: 480px; margin: auto;
+            border: 2px solid #334155; border-radius: 12px; overflow: hidden;
+            background: #000;
         }
-        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 12px; }
-        #webcam { visibility: hidden; } 
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        /* Mirror effect biar kayak cermin */
+        video, canvas { transform: scaleX(-1); }
     </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center font-sans">
-    
-    <!-- Navbar -->
-    <div class="absolute top-0 w-full p-4 flex justify-between items-center bg-gray-900 border-b border-gray-800">
-        <h1 class="text-2xl font-bold tracking-tighter text-green-400">
-            <i class="fas fa-bolt"></i> FAST<span class="text-white">FRUIT</span>
+
+    <!-- Header -->
+    <div class="mb-6 text-center">
+        <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
+            FASTFRUIT <span class="text-white text-xl">v2.0</span>
         </h1>
-        <div class="px-4 py-1 bg-gray-800 rounded border border-gray-700 text-xs font-mono">
-            FPS: <span id="fps-counter" class="text-yellow-400 font-bold">0</span>
-        </div>
+        <p class="text-gray-400 text-sm mt-2">Pastikan Izin Kamera Dinyalakan!</p>
     </div>
 
-    <div class="text-center mt-10">
-        <div class="monitor-screen bg-black rounded-xl overflow-hidden">
-            <video id="webcam" autoplay playsinline width="640" height="480"></video>
-            <canvas id="output-canvas" width="640" height="480"></canvas>
-        </div>
-        <div class="mt-6 flex justify-center gap-6">
-            <div class="bg-gray-800 px-6 py-4 rounded-xl border border-gray-700 min-w-[200px]">
-                <p class="text-gray-400 text-xs uppercase tracking-widest mb-1">PREDICTION</p>
-                <h2 id="label-result" class="text-3xl font-bold text-white">Loading...</h2>
+    <!-- Area Video -->
+    <div class="monitor shadow-[0_0_50px_rgba(0,255,0,0.1)]">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="output-canvas" width="640" height="480"></canvas>
+    </div>
+
+    <!-- Status & Error Log -->
+    <div class="mt-6 text-center w-full max-w-2xl px-4">
+        <div id="loading-box" class="bg-gray-800 p-4 rounded-xl border border-gray-700">
+            <div class="flex justify-center items-center gap-3">
+                <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <span id="status-text" class="text-blue-400 font-mono">Menghubungkan Kamera...</span>
             </div>
-            <div class="bg-gray-800 px-6 py-4 rounded-xl border border-gray-700 min-w-[150px]">
-                <p class="text-gray-400 text-xs uppercase tracking-widest mb-1">CONFIDENCE</p>
-                <h2 id="conf-result" class="text-3xl font-bold text-blue-400">0%</h2>
+            <!-- Pesan Error akan muncul disini -->
+            <p id="error-log" class="text-red-400 text-xs mt-2 font-mono hidden"></p>
+        </div>
+
+        <!-- Hasil Prediksi (Hidden dulu sampai ready) -->
+        <div id="result-box" class="hidden flex justify-center gap-4 mt-4">
+            <div class="bg-gray-800 px-6 py-3 rounded-lg border border-gray-600">
+                <p class="text-xs text-gray-500 uppercase">PREDICTION</p>
+                <h2 id="label-res" class="text-2xl font-bold text-white">-</h2>
+            </div>
+            <div class="bg-gray-800 px-6 py-3 rounded-lg border border-gray-600">
+                <p class="text-xs text-gray-500 uppercase">CONFIDENCE</p>
+                <h2 id="conf-res" class="text-2xl font-bold text-blue-400">-</h2>
+            </div>
+            <div class="bg-gray-800 px-4 py-3 rounded-lg border border-gray-600">
+                <p class="text-xs text-gray-500 uppercase">FPS</p>
+                <h2 id="fps-res" class="text-2xl font-bold text-yellow-400">0</h2>
             </div>
         </div>
-        <p id="status-msg" class="mt-4 text-gray-500 text-sm animate-pulse">Memuat Model AI...</p>
     </div>
 
     <script>
-        // --- SESUAIKAN URUTAN LABEL DENGAN HASIL TRAINING KAMU ---
+        // --- KONFIGURASI ---
+        // GANTI INI SESUAI URUTAN DATASET KAMU
         const CLASSES = [
             'Fresh Apple', 'Fresh Banana', 'Fresh Orange',
             'Rotten Apple', 'Rotten Banana', 'Rotten Orange'
         ];
-        
+
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('output-canvas');
         const ctx = canvas.getContext('2d');
-        const labelEl = document.getElementById('label-result');
-        const confEl = document.getElementById('conf-result');
-        const statusEl = document.getElementById('status-msg');
-        const fpsEl = document.getElementById('fps-counter');
+        const statusText = document.getElementById('status-text');
+        const errorLog = document.getElementById('error-log');
+        const resultBox = document.getElementById('result-box');
+        const loadingBox = document.getElementById('loading-box');
 
         let model;
         let lastFrameTime = 0;
 
-        async function setupCamera() {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 640, height: 480, facingMode: 'environment' }, audio: false
-            });
-            video.srcObject = stream;
-            return new Promise((resolve) => { video.onloadedmetadata = () => resolve(video); });
+        // Fungsi menampilkan error di layar (biar user tau)
+        function showError(msg, detail="") {
+            statusText.innerText = "TERJADI ERROR!";
+            statusText.className = "text-red-500 font-bold";
+            errorLog.innerText = `${msg}\nDetail: ${detail}`;
+            errorLog.classList.remove('hidden');
+            console.error(msg, detail);
         }
 
-        async function loadModel() {
+        // 1. SETUP KAMERA
+        async function setupCamera() {
             try {
-                // Load model dari folder static/model_web
-                model = await tf.loadLayersModel('/model_web/model.json');
-                statusEl.innerText = "Model Siap! Mendeteksi...";
-                statusEl.classList.remove('animate-pulse');
-                statusEl.classList.add('text-green-500');
-                detectFrame();
-            } catch (error) {
-                console.error(error);
-                statusEl.innerText = "Gagal memuat model. Cek Console (F12).";
-                statusEl.classList.add('text-red-500');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: 'environment' },
+                    audio: false
+                });
+                video.srcObject = stream;
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        resolve(video);
+                    };
+                });
+            } catch (err) {
+                showError("Gagal Mengakses Kamera.", "Pastikan kamera diizinkan di browser (ikon gembok/kamera di URL bar). " + err);
+                throw err;
             }
         }
 
+        // 2. LOAD MODEL
+        async function loadModel() {
+            try {
+                statusText.innerText = "Sedang Memuat Model AI...";
+                
+                // Pastikan path ini benar
+                model = await tf.loadLayersModel('/model_web/model.json');
+                
+                // Pemanasan Model (Warmup)
+                statusText.innerText = "Menyiapkan GPU...";
+                const zeros = tf.zeros([1, 224, 224, 3]);
+                model.predict(zeros).dispose();
+                zeros.dispose();
+
+                // Selesai
+                statusText.innerText = "Sistem Siap!";
+                loadingBox.classList.add('hidden');
+                resultBox.classList.remove('hidden');
+                
+                detectFrame();
+
+            } catch (err) {
+                showError("Gagal Memuat Model.", "Cek apakah folder 'static/model_web' sudah benar isinya? " + err);
+            }
+        }
+
+        // 3. LOOP DETEKSI
         async function detectFrame() {
             const now = performance.now();
             const fps = 1000 / (now - lastFrameTime);
             lastFrameTime = now;
-            fpsEl.innerText = Math.round(fps);
+            document.getElementById('fps-res').innerText = Math.round(fps);
 
+            // Gambar video ke canvas
             ctx.drawImage(video, 0, 0, 640, 480);
 
             if (model) {
                 tf.tidy(() => {
-                    let img = tf.browser.fromPixels(video)
+                    // Preprocessing
+                    const img = tf.browser.fromPixels(video)
                         .resizeBilinear([224, 224])
                         .div(tf.scalar(255))
                         .expandDims();
 
+                    // Prediksi
                     const prediction = model.predict(img);
                     const scores = prediction.dataSync();
+                    
                     const maxScore = Math.max(...scores);
                     const maxIndex = scores.indexOf(maxScore);
                     
                     const label = CLASSES[maxIndex];
                     const confidence = (maxScore * 100).toFixed(1);
 
-                    labelEl.innerText = label;
-                    confEl.innerText = confidence + "%";
+                    // Update UI
+                    document.getElementById('label-res').innerText = label;
+                    document.getElementById('conf-res').innerText = confidence + "%";
                     
-                    if (label.includes("Fresh")) {
-                        labelEl.className = "text-3xl font-bold text-green-400";
-                        drawBox("green", label);
+                    // Warna teks
+                    const labelEl = document.getElementById('label-res');
+                    if (label.toLowerCase().includes("fresh")) {
+                        labelEl.className = "text-2xl font-bold text-green-400";
+                        // Gambar Kotak Hijau
+                        ctx.strokeStyle = "#4ade80";
+                        ctx.lineWidth = 4;
+                        ctx.strokeRect(100, 50, 440, 380);
                     } else {
-                        labelEl.className = "text-3xl font-bold text-red-400";
-                        drawBox("red", label);
+                        labelEl.className = "text-2xl font-bold text-red-500";
+                        // Gambar Kotak Merah
+                        ctx.strokeStyle = "#ef4444";
+                        ctx.lineWidth = 4;
+                        ctx.strokeRect(100, 50, 440, 380);
                     }
                 });
             }
+
             requestAnimationFrame(detectFrame);
         }
 
-        function drawBox(color, text) {
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 4;
-            ctx.strokeRect(100, 50, 440, 380);
-        }
+        // Jalankan
+        setupCamera()
+            .then(() => loadModel())
+            .catch(err => console.log("Init Failed"));
 
-        setupCamera().then(() => { loadModel(); });
     </script>
 </body>
 </html>
